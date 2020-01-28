@@ -3,15 +3,20 @@ using GameLauncher.Properties;
 using GameLauncher.ViewModels;
 using GameLauncher.Views;
 using MaterialDesignThemes.Wpf;
+using Microsoft.Win32;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Windows.Media;
 using System.IO;
 using System.Net;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Text.RegularExpressions;
+using System.Device.Location;
+using Innovative.SolarCalculator;
 
 namespace GameLauncher
 {
@@ -22,8 +27,14 @@ namespace GameLauncher
         public static AddGames DialogAddGames = new AddGames();
         public static EditGames DialogEditGames = new EditGames();
         public static ExeSelection DialogExeSelection = new ExeSelection();
-        public static ObservableCollection<GameList> GameListMW { get; set; }
-        public static ObservableCollection<GenreList> GenreListMW { get; set; }
+        public static ObservableCollection<GameList> GameListMW
+        {
+            get; set;
+        }
+        public static ObservableCollection<GenreList> GenreListMW
+        {
+            get; set;
+        }
         public LoadAllGames lag = new LoadAllGames();
         private BannerViewModel bannerViewModel = new BannerViewModel();
         private ListViewModel listViewModel = new ListViewModel();
@@ -44,9 +55,23 @@ namespace GameLauncher
         public string view;
         public string newText;
         public BackgroundWorker lagbw;
+        public bool LauncherSteam;
+        public bool LauncherEpic;
+        public bool LauncherUplay;
+        public bool LauncherOrigin;
+        public bool LauncherBattleNet;
+        public string SteamExePath;
+        public string EpicExePath;
+        public string UplayExePath;
+        public string OriginExePath;
+        public string BattleNetExePath;
+        public DateTime sunriseTime;
+        public DateTime sunsetTime;
 
         public MainWindow()
         {
+            MakeDirectories();
+            MakeDefaultGenres();
             lagbw = new BackgroundWorker
             {
                 WorkerReportsProgress = true
@@ -55,21 +80,189 @@ namespace GameLauncher
             lagbw.DoWork += LagBWDoWork;
             lagbw.RunWorkerCompleted += LagBWRunWorkerCompleted;
             Trace.Listeners.Clear();
+            CheckLaunchersExist();
             FixFilePaths();
             InitTraceListen();
             this.Height = (SystemParameters.PrimaryScreenHeight * 0.75);
             this.Width = (SystemParameters.PrimaryScreenWidth * 0.75);
             LoadAllGames lag = new LoadAllGames();
             LoadSearch ls = new LoadSearch();
-            MakeDirectories();
-            MakeDefaultGenres();
             lag.LoadGenres();
             InitializeComponent();
+            ManageLauncherIconVisibility();
             LoadAllViews();
             DataContext = null;
             isDownloadOpen = false;
             LoadSettings();
             Trace.WriteLine(DateTime.Now + ": New Session started");
+        }
+
+        public void CheckLaunchersExist()
+        {
+            //Steam checker
+            try
+            {
+                string steam32 = "SOFTWARE\\VALVE";
+                string steam64 = "SOFTWARE\\Wow6432Node\\Valve";
+                string steam32path;
+                string steam64path;
+                RegistryKey key32 = Registry.LocalMachine.OpenSubKey(steam32);
+                RegistryKey key64 = Registry.LocalMachine.OpenSubKey(steam64);
+                if (key64.ToString() != null || key64.ToString() != "")
+                {
+                    //Steam is installed - 64 bit
+                    foreach (string k64subKey in key64.GetSubKeyNames())
+                    {
+                        using (RegistryKey subKey = key64.OpenSubKey(k64subKey))
+                        {
+                            steam64path = subKey.GetValue("InstallPath").ToString();
+                            SteamExePath = steam64path + "\\Steam.exe";
+                            LauncherSteam = true;
+                        }
+                    }
+                }
+                if (key32.ToString() != null || key32.ToString() != "")
+                {
+                    //Steam is installed - 32 bit
+                    foreach (string k32subKey in key32.GetSubKeyNames())
+                    {
+                        using (RegistryKey subKey = key32.OpenSubKey(k32subKey))
+                        {
+                            steam32path = subKey.GetValue("InstallPath").ToString();
+                            SteamExePath = steam32path + "\\Steam.exe";
+                            LauncherSteam = true;
+                        }
+                    }
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Steam Check Failed: " + e); }
+            //Epic Games Checker
+            try
+            {
+                string epicRegistry = "SOFTWARE\\WOW6432Node\\EpicGames\\Unreal Engine";
+                string epicGamesDir;
+                RegistryKey epickey = Registry.LocalMachine.OpenSubKey(epicRegistry);
+                foreach (string ksubkey in epickey.GetSubKeyNames())
+                {
+                    using (RegistryKey subkey = epickey.OpenSubKey(ksubkey))
+                    {
+                        epicGamesDir = subkey.GetValue("InstalledDirectory").ToString();
+                        epicGamesDir = epicGamesDir.Substring(0, epicGamesDir.Length - 4);
+                        EpicExePath = epicGamesDir + "Launcher\\Portal\\Binaries\\Win32\\EpicGamesLauncher.exe";
+                        LauncherEpic = true;
+                    }
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Epic Check Failed: " + e); }
+            //Origin Checker
+            try
+            {
+                string regkey = "SOFTWARE\\WOW6432Node\\Origin";
+                RegistryKey originkey = Registry.LocalMachine.OpenSubKey(regkey);
+                using (RegistryKey subkey = originkey.OpenSubKey(regkey))
+                {
+                    OriginExePath = originkey.GetValue("ClientPath").ToString();
+                    LauncherOrigin = true;
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Origin Check Failed: " + e); }
+            //BattleNet Checker
+            try
+            {
+                string regkey = "SOFTWARE\\WOW6432Node\\Blizzard Entertainment\\Battle.net\\Capabilities";
+                RegistryKey battlenetKey = Registry.LocalMachine.OpenSubKey(regkey);
+                using (RegistryKey subkey = battlenetKey.OpenSubKey(regkey))
+                {
+                    string battlenetExe = battlenetKey.GetValue("ApplicationIcon").ToString();
+                    battlenetExe = battlenetExe.Replace("\"", "");
+                    BattleNetExePath = battlenetExe.Replace(",0", "");
+                    LauncherBattleNet = true;
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("BattleNet Check Failed: " + e); }
+            //Uplay Checker
+
+            try
+            {
+                string regkey = "SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher";
+                RegistryKey uplay = Registry.LocalMachine.OpenSubKey(regkey);
+                using (RegistryKey subkey = uplay.OpenSubKey(regkey))
+                {
+                    UplayExePath = uplay.GetValue("InstallDir").ToString();
+                    UplayExePath = UplayExePath + "Uplay.exe";
+                    LauncherUplay = true;
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Uplay Check Failed: " + e); }
+        }
+
+        public void ManageLauncherIconVisibility()
+        {
+            if (LauncherSteam == false)
+            {
+                SteamLaunchBtn.Visibility = Visibility.Collapsed;
+            }
+            if (LauncherEpic == false)
+            {
+                EpicLaunchBtn.Visibility = Visibility.Collapsed;
+            }
+            if (LauncherOrigin == false)
+            {
+                OriginLaunchBtn.Visibility = Visibility.Collapsed;
+            }
+            if (LauncherBattleNet == false)
+            {
+                BattleNetLaunchBtn.Visibility = Visibility.Collapsed;
+            }
+            if (LauncherUplay == false)
+            {
+                UplayLaunchBtn.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        public void OpenLauncher(object sender, RoutedEventArgs e)
+        {
+            string tag = ((Button)sender).Tag.ToString();
+            if (tag == "Steam")
+            {
+                try
+                {
+                    Process.Start(SteamExePath);
+                }
+                catch (Exception exc) { Trace.WriteLine("Failed to start Steam: " + exc); }
+            }
+            if (tag == "Origin")
+            {
+                try
+                {
+                    Process.Start(OriginExePath);
+                }
+                catch (Exception exc) { Trace.WriteLine("Failed to start Origin: " + exc); }
+            }
+            if (tag == "Uplay")
+            {
+                try
+                {
+                    Process.Start(UplayExePath);
+                }
+                catch (Exception exc) { Trace.WriteLine("Failed to start Uplay: " + exc); }
+            }
+            if (tag == "Epic")
+            {
+                try
+                {
+                    Process.Start(EpicExePath);
+                }
+                catch (Exception exc) { Trace.WriteLine("Failed to start Epic Games: " + exc); }
+            }
+            if (tag == "Battle")
+            {
+                try
+                {
+                    Process.Start(BattleNetExePath);
+                }
+                catch (Exception exc) { Trace.WriteLine("Failed to start Battle.Net: " + exc); }
+            }
         }
         public void LagBWDoWork(object sender, DoWorkEventArgs e)
         {
@@ -87,16 +280,34 @@ namespace GameLauncher
             posterViewModel.LoadGames();
             listViewModel.LoadGames();
             bannerViewModel.LoadGames();
-            if (Settings.Default.viewtype.ToString() == "Poster") { PosterViewActive(); }
-            if (Settings.Default.viewtype.ToString() == "Banner") { BannerViewActive(); }
-            if (Settings.Default.viewtype.ToString() == "List") { ListViewActive(); }
+            if (Settings.Default.viewtype.ToString() == "Poster")
+            {
+                PosterViewActive();
+            }
+            if (Settings.Default.viewtype.ToString() == "Banner")
+            {
+                BannerViewActive();
+            }
+            if (Settings.Default.viewtype.ToString() == "List")
+            {
+                ListViewActive();
+            }
             DialogFrame.Visibility = Visibility.Hidden;
         }
         public void MakeDirectories()
         {
-            if (!Directory.Exists("./Resources/")) { Directory.CreateDirectory("./Resources/"); }
-            if (!Directory.Exists("./Resources/img/")) { Directory.CreateDirectory("./Resources/img/"); }
-            if (!Directory.Exists("./Resources/shortcuts/")) { Directory.CreateDirectory("./Resources/shortcuts/"); }
+            if (!Directory.Exists("./Resources/"))
+            {
+                Directory.CreateDirectory("./Resources/");
+            }
+            if (!Directory.Exists("./Resources/img/"))
+            {
+                Directory.CreateDirectory("./Resources/img/");
+            }
+            if (!Directory.Exists("./Resources/shortcuts/"))
+            {
+                Directory.CreateDirectory("./Resources/shortcuts/");
+            }
         }
         public void LoadAllViews()
         {
@@ -104,8 +315,16 @@ namespace GameLauncher
             DialogFrame.Content = loadingdialog;
             try
             {
-                try { GenreListMW.Clear(); } catch { }
-                try { GameListMW.Clear(); } catch { }
+                try
+                {
+                    GenreListMW.Clear();
+                }
+                catch { }
+                try
+                {
+                    GameListMW.Clear();
+                }
+                catch { }
                 lagbw.RunWorkerAsync();
             }
             catch { }
@@ -179,7 +398,10 @@ namespace GameLauncher
                 var log = File.Create(logfile);
                 log.Close();
             }
-            else { var log = File.Create(logfile); }
+            else
+            {
+                var log = File.Create(logfile);
+            }
             TextWriterTraceListener twtl = new TextWriterTraceListener(logfile)
             {
                 TraceOutputOptions = TraceOptions.ThreadId | TraceOptions.DateTime
@@ -212,8 +434,14 @@ namespace GameLauncher
         public bool CheckBinding(string title)
         {
             bool result = exesViewModel.CheckBinding(title);
-            if (result == true) { return true; }
-            else { return false; }
+            if (result == true)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
         public void OpenExeSearchDialog()
         {
@@ -275,8 +503,43 @@ namespace GameLauncher
                     isDownloadOpen = false;
                     GC.Collect();
                 }
-                else { Trace.WriteLine(DateTime.Now + ": -System unsure which dialog currently open"); }
+                else
+                {
+                    Trace.WriteLine(DateTime.Now + ": -System unsure which dialog currently open");
+                }
             }
+        }
+        public void GenresLoaded(object sender, RoutedEventArgs e)
+        {
+            var converter = new BrushConverter();
+            Brush colour = (Brush)converter.ConvertFromString(Settings.Default.genrecolour);
+            UpdateGenreColours(colour);
+        }
+        public void UpdateGenreColours(Brush colour)
+        {
+            if (GenreSidebar.Items.Count != 0)
+            {
+                for (int i = 0; i < GenreSidebar.Items.Count; i++)
+                {
+                    ContentPresenter c = (ContentPresenter)GenreSidebar.ItemContainerGenerator.ContainerFromItem(GenreSidebar.Items[i]);
+                    try
+                    {
+                        Button tb = c.ContentTemplate.FindName("GenreButton", c) as Button;
+                        tb.Foreground = colour;
+                        AllGenreBtn.Foreground = colour;
+                    }
+                    catch (Exception br) { Trace.WriteLine("Break: " + br); }
+                }
+            }
+        }
+        public void UpdateLauncherButtons()
+        {
+            var converter = new BrushConverter();
+            SteamLaunchBtn.Foreground = (Brush)converter.ConvertFromString(Settings.Default.launchercolour);
+            OriginLaunchBtn.Foreground = (Brush)converter.ConvertFromString(Settings.Default.launchercolour);
+            UplayLaunchBtn.Foreground = (Brush)converter.ConvertFromString(Settings.Default.launchercolour);
+            EpicLaunchBtn.Foreground = (Brush)converter.ConvertFromString(Settings.Default.launchercolour);
+            BattleNetLaunchBtn.Foreground = (Brush)converter.ConvertFromString(Settings.Default.launchercolour);
         }
         public void DownloadImage(string url)
         {
@@ -362,9 +625,18 @@ namespace GameLauncher
             string genreToFilter = ((Button)sender).Tag.ToString();
             if (DataContext == settingsViewModel)
             {
-                if (Settings.Default.viewtype == "Poster") { DataContext = posterViewModel; }
-                if (Settings.Default.viewtype == "Banner") { DataContext = bannerViewModel; }
-                if (Settings.Default.viewtype == "List") { DataContext = listViewModel; }
+                if (Settings.Default.viewtype == "Poster")
+                {
+                    DataContext = posterViewModel;
+                }
+                if (Settings.Default.viewtype == "Banner")
+                {
+                    DataContext = bannerViewModel;
+                }
+                if (Settings.Default.viewtype == "List")
+                {
+                    DataContext = listViewModel;
+                }
             }
             pv.GenreToFilter(genreToFilter);
             pv.RefreshList2(cvs);
@@ -409,64 +681,67 @@ namespace GameLauncher
 
         public void FixFilePaths()
         {
-            string file = "./Resources/GamesList.txt";
-            string fileout = "./Resources/GamesList2.txt";
-            var contents = File.ReadAllLines(file);
-            Array.Sort(contents);
-            File.WriteAllLines(fileout, contents);
-            File.Delete("./Resources/GamesList.txt");
-            File.Move("./Resources/GamesList2.txt", "./Resources/GamesList.txt");
-            bool textModified = false;
-            string installPath = AppDomain.CurrentDomain.BaseDirectory;
             if (File.Exists("./Resources/GamesList.txt"))
             {
-                string text = File.ReadAllText("./Resources/GamesList.txt");
+                string file = "./Resources/GamesList.txt";
+                string fileout = "./Resources/GamesList2.txt";
+                var contents = File.ReadAllLines(file);
+                Array.Sort(contents);
+                File.WriteAllLines(fileout, contents);
+                File.Delete("./Resources/GamesList.txt");
+                File.Move("./Resources/GamesList2.txt", "./Resources/GamesList.txt");
+                bool textModified = false;
+                string installPath = AppDomain.CurrentDomain.BaseDirectory;
+                if (File.Exists("./Resources/GamesList.txt"))
+                {
+                    string text = File.ReadAllText("./Resources/GamesList.txt");
 
-                if (text.Contains(installPath + "Resources/img/"))
-                {
-                    newText = text.Replace(installPath + "Resources/img/", "");
-                    textModified = true;
-                }
-                if (text.Contains(installPath + "Resources\\img\\"))
-                {
-                    if (textModified)
+                    if (text.Contains(installPath + "Resources/img/"))
                     {
-                        newText = newText.Replace(installPath + "Resources\\img\\", "");
-                    }
-                    else
-                    {
-                        newText = text.Replace(installPath + "Resources\\img\\", "");
+                        newText = text.Replace(installPath + "Resources/img/", "");
                         textModified = true;
                     }
-                }
-                if (text.Contains(installPath + "Resources/shortcuts/"))
-                {
-                    if (textModified)
+                    if (text.Contains(installPath + "Resources\\img\\"))
                     {
-                        newText = newText.Replace(installPath + "Resources/shortcuts/", "");
+                        if (textModified)
+                        {
+                            newText = newText.Replace(installPath + "Resources\\img\\", "");
+                        }
+                        else
+                        {
+                            newText = text.Replace(installPath + "Resources\\img\\", "");
+                            textModified = true;
+                        }
                     }
-                    else
+                    if (text.Contains(installPath + "Resources/shortcuts/"))
                     {
-                        newText = text.Replace(installPath + "Resources/shortcuts/", "");
-                        textModified = true;
+                        if (textModified)
+                        {
+                            newText = newText.Replace(installPath + "Resources/shortcuts/", "");
+                        }
+                        else
+                        {
+                            newText = text.Replace(installPath + "Resources/shortcuts/", "");
+                            textModified = true;
+                        }
                     }
-                }
-                else if (text.Contains(installPath + "Resources\\shortcuts\\"))
-                {
-                    if (textModified)
+                    else if (text.Contains(installPath + "Resources\\shortcuts\\"))
                     {
-                        newText = newText.Replace(installPath + "Resources\\shortcuts\\", "");
+                        if (textModified)
+                        {
+                            newText = newText.Replace(installPath + "Resources\\shortcuts\\", "");
+                        }
+                        else
+                        {
+                            newText = text.Replace(installPath + "Resources\\shortcuts\\", "");
+                        }
                     }
-                    else
+                    if (newText != null)
                     {
-                        newText = text.Replace(installPath + "Resources\\shortcuts\\", "");
+                        File.WriteAllText("./Resources/GamesList2.txt", newText);
+                        File.Delete("./Resources/GamesList.txt");
+                        File.Move("./Resources/GamesList2.txt", "./Resources/GamesList.txt");
                     }
-                }
-                if (newText != null)
-                {
-                    File.WriteAllText("./Resources/GamesList2.txt", newText);
-                    File.Delete("./Resources/GamesList.txt");
-                    File.Move("./Resources/GamesList2.txt", "./Resources/GamesList.txt");
                 }
             }
         }
@@ -476,15 +751,35 @@ namespace GameLauncher
             DialogFrame.Content = loadingdialog;
             try
             {
-                try { GenreListMW.Clear(); } catch { }
-                try { GameListMW.Clear(); } catch { }
+                try
+                {
+                    GenreListMW.Clear();
+                }
+                catch { }
+                try
+                {
+                    GameListMW.Clear();
+                }
+                catch { }
                 lagbw.RunWorkerAsync();
             }
             catch { }
-            if (view == "list") { ListViewActive(); }
-            else if (view == "poster") { PosterViewActive(); }
-            else if (view == "banner") { BannerViewActive(); }
-            else if (view == "settings") { SettingsViewActive(); }
+            if (view == "list")
+            {
+                ListViewActive();
+            }
+            else if (view == "poster")
+            {
+                PosterViewActive();
+            }
+            else if (view == "banner")
+            {
+                BannerViewActive();
+            }
+            else if (view == "settings")
+            {
+                SettingsViewActive();
+            }
         }
         private void PosterButton_OnClick(object sender, RoutedEventArgs e)
         {
@@ -525,16 +820,125 @@ namespace GameLauncher
                 ExeSelection.ChangeWindowSize(this.ActualWidth * 0.9, this.ActualHeight * 0.9);
             }
         }
+        public void StoreSize()
+        {
+            Top = Settings.Default.Top;
+            Left = Settings.Default.Left;
+            Height = Settings.Default.Height;
+            Width = Settings.Default.Width;
+            if (Settings.Default.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+        }
+        public void Window_Closed(object sender, CancelEventArgs e)
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                Settings.Default.Top = RestoreBounds.Top;
+                Settings.Default.Left = RestoreBounds.Left;
+                Settings.Default.Height = RestoreBounds.Height;
+                Settings.Default.Location = RestoreBounds.Location.ToString();
+                Settings.Default.Maximized = true;
+            }
+            else
+            {
+                Settings.Default.Top = Top;
+                Settings.Default.Left = Left;
+                Settings.Default.Height = Height;
+                Settings.Default.Width = Width;
+                Settings.Default.Location = RestoreBounds.Location.ToString();
+                Settings.Default.Maximized = false;
+            }
+
+            Settings.Default.Save();
+        }
         public void LoadSettings()
         {
-            if (Settings.Default.theme.ToString() == "Dark")
+            Regex regexColourCode8 = new Regex("^#[a-fA-F0-9]{8}$");
+            Regex regexColourCode6 = new Regex("^#[a-fA-F0-9]{6}$");
+            string launcher = Settings.Default.launchercolour;
+            string genre = Settings.Default.genrecolour;
+            string titles = Settings.Default.gametitles;
+            string banner = Settings.Default.bannertitles;
+            string list = Settings.Default.listtitles;
+            try
             {
-                ThemeAssist.SetTheme(Application.Current.MainWindow, BaseTheme.Dark);
+                if (regexColourCode6.IsMatch(launcher) || regexColourCode8.IsMatch(launcher))
+                {
+                }
+                else
+                {
+                    Settings.Default.launchercolour = "#3369e8";
+                }
             }
-            else if (Settings.Default.theme.ToString() == "Light")
+            catch (Exception e) { Trace.WriteLine("Error: " + e); }
+            try
             {
-                ThemeAssist.SetTheme(Application.Current.MainWindow, BaseTheme.Light);
+                if (regexColourCode6.IsMatch(genre) || regexColourCode8.IsMatch(genre))
+                {
+                    var converter = new BrushConverter();
+                    AllGenreBtn.Foreground = (Brush)converter.ConvertFromString(genre);
+                }
+                else
+                {
+                    Settings.Default.genrecolour = "#3369e8";
+                    genre = "#3369e8";
+                    var converter = new BrushConverter();
+                    AllGenreBtn.Foreground = (Brush)converter.ConvertFromString(genre);
+                }
             }
+            catch (Exception e) { Trace.WriteLine("Error: " + e); }
+            try
+            {
+
+                if (regexColourCode6.IsMatch(titles) || regexColourCode8.IsMatch(titles))
+                {
+                }
+                else
+                {
+                    Settings.Default.gametitles = "#3369e8";
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Error: " + e); }
+            try
+            {
+                if (regexColourCode6.IsMatch(banner) || regexColourCode8.IsMatch(banner))
+                {
+                }
+                else
+                {
+                    Settings.Default.bannertitles = "#3369e8";
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Error: " + e); }
+            try
+            {
+                if (regexColourCode6.IsMatch(list) || regexColourCode8.IsMatch(list))
+                {
+                }
+                else
+                {
+                    Settings.Default.listtitles = "#3369e8";
+                }
+            }
+            catch (Exception e) { Trace.WriteLine("Error: " + e); }
+            Top = Settings.Default.Top;
+            Left = Settings.Default.Left;
+            Height = Settings.Default.Height;
+            Width = Settings.Default.Width;
+            if (Settings.Default.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+                if (Settings.Default.theme.ToString() == "Dark")
+                {
+                    ThemeAssist.SetTheme(Application.Current.MainWindow, BaseTheme.Dark);
+                }
+                else if (Settings.Default.theme.ToString() == "Light")
+                {
+                    ThemeAssist.SetTheme(Application.Current.MainWindow, BaseTheme.Light);
+                }
             if (Settings.Default.primary.ToString() != "")
             {
                 new PaletteHelper().ReplacePrimaryColor(Settings.Default.primary.ToString());
@@ -543,6 +947,15 @@ namespace GameLauncher
             {
                 new PaletteHelper().ReplaceAccentColor(Settings.Default.accent.ToString());
             }
+            if (Settings.Default.fabcolour == "primary")
+            {
+                AddGameButton.Style = Application.Current.Resources["MaterialDesignFloatingActionButton"] as Style;
+            }
+            if (Settings.Default.fabcolour == "accent")
+            {
+                AddGameButton.Style = Application.Current.Resources["MaterialDesignFloatingActionAccentButton"] as Style;
+            }
+            UpdateLauncherButtons();
         }
     }
 }

@@ -10,6 +10,7 @@
         MinWidth="400"
         MinHeight="600"
         Background="{DynamicResource MaterialDesignPaper}"
+        Closing="Window_Closed"
         FontFamily="{StaticResource MaterialDesignFont}"
         Icon="breeze.ico"
         SizeChanged="MWSizeChanged"
@@ -21,16 +22,21 @@
         WindowStartupLocation="CenterScreen">
     <!--  Required to make different views work  -->
     <Window.Resources>
-        <DataTemplate x:Name="bannerViewTemplate" DataType="{x:Type viewmodels:BannerViewModel}">
+        <BooleanToVisibilityConverter x:Key="b2v" />
+        <DataTemplate x:Name="bannerViewTemplate"
+                      DataType="{x:Type viewmodels:BannerViewModel}">
             <views:BannerView DataContext="{Binding}" />
         </DataTemplate>
-        <DataTemplate x:Name="listViewTemplate" DataType="{x:Type viewmodels:ListViewModel}">
+        <DataTemplate x:Name="listViewTemplate"
+                      DataType="{x:Type viewmodels:ListViewModel}">
             <views:ListView DataContext="{Binding}" />
         </DataTemplate>
-        <DataTemplate x:Name="posterViewTemplate" DataType="{x:Type viewmodels:PosterViewModel}">
+        <DataTemplate x:Name="posterViewTemplate"
+                      DataType="{x:Type viewmodels:PosterViewModel}">
             <views:PosterView DataContext="{Binding}" />
         </DataTemplate>
-        <DataTemplate x:Name="settingsViewTemplate" DataType="{x:Type viewmodels:SettingsViewModel}">
+        <DataTemplate x:Name="settingsViewTemplate"
+                      DataType="{x:Type viewmodels:SettingsViewModel}">
             <views:SettingsView DataContext="{Binding}" />
         </DataTemplate>
         <CollectionViewSource x:Key="GenreListCVS"
@@ -40,6 +46,7 @@
                 <scm:SortDescription PropertyName="Name" />
             </CollectionViewSource.SortDescriptions>
         </CollectionViewSource>
+
     </Window.Resources>
     <Grid>
         <!--  DrawerHost is the main "host" to have the hamburger  -->
@@ -103,7 +110,8 @@
                                     </StackPanel>
                                 </Button>
                                 <!--  Refresh Button  -->
-                                <Button Click="RefreshGames_OnClick" x:Name="rgbtn">
+                                <Button x:Name="rgbtn"
+                                        Click="RefreshGames_OnClick">
                                     <StackPanel Orientation="Horizontal">
                                         <materialDesign:PackIcon Margin="0,0,10,0"
                                                                  VerticalAlignment="Center"
@@ -133,33 +141,133 @@
             <materialDesign:DrawerHost.LeftDrawerContent>
                 <DockPanel MinWidth="212">
                     <!--  Button to open hamburger  -->
-                    <ToggleButton Margin="16"
-                                  HorizontalAlignment="Right"
-                                  DockPanel.Dock="Top"
-                                  IsChecked="{Binding ElementName=MenuToggleButton, Path=IsChecked, Mode=TwoWay}"
-                                  Style="{StaticResource MaterialDesignHamburgerToggleButton}" />
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical">
-                            <Button Click="ApplyGenreFilter_OnClick"
-                                    Content="All Genres"
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="15*" />
+                            <RowDefinition Height="85*" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <ToggleButton Grid.Row="0"
+                                      Grid.Column="1"
+                                      Margin="10"
+                                      HorizontalAlignment="Right"
+                                      DockPanel.Dock="Top"
+                                      IsChecked="{Binding ElementName=MenuToggleButton, Path=IsChecked, Mode=TwoWay}"
+                                      Style="{StaticResource MaterialDesignHamburgerToggleButton}" />
+
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="0"
+                                    Margin="15,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                            <!--  Icons for Launchers  -->
+                            <Button x:Name="SteamLaunchBtn"
+                                    Width="30"
+                                    Height="30"
+                                    Padding="0,0,0,0"
+                                    Click="OpenLauncher"
                                     Style="{StaticResource MaterialDesignFlatButton}"
-                                    Tag="" />
-                            <ItemsControl x:Name="GenreSidebar" ItemsSource="{Binding Source={StaticResource GenreListCVS}, IsAsync=True}"
-                                  ScrollViewer.CanContentScroll="True">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel>
-                                            <Button Name="GenreButton"
-                                                    Click="ApplyGenreFilter_OnClick"
-                                                    Content="{Binding Name}"
-                                                    Style="{StaticResource MaterialDesignFlatButton}"
-                                                    Tag="{Binding Name}" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                    Tag="Steam"
+                                    ToolTip="Steam">
+                                <materialDesign:PackIcon Width="20"
+                                                         Height="20"
+                                                         Margin="5,5,5,5"
+                                                         VerticalAlignment="Center"
+                                                         Kind="Steam" />
+                            </Button>
+                            <Button x:Name="OriginLaunchBtn"
+                                    Width="30"
+                                    Height="30"
+                                    Padding="0,0,0,0"
+                                    Click="OpenLauncher"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Tag="Origin"
+                                    ToolTip="Origin">
+                                <materialDesign:PackIcon Width="20"
+                                                         Height="20"
+                                                         Margin="5,5,5,5"
+                                                         VerticalAlignment="Center"
+                                                         FontSize="20"
+                                                         Kind="Origin" />
+                            </Button>
+                            <Button x:Name="UplayLaunchBtn"
+                                    Width="35"
+                                    Height="35"
+                                    Padding="0,0,0,0"
+                                    Click="OpenLauncher"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Tag="Uplay"
+                                    ToolTip="Uplay">
+                                <materialDesign:PackIcon Width="20"
+                                                         Height="20"
+                                                         Margin="5,5,5,5"
+                                                         VerticalAlignment="Center"
+                                                         FontSize="20"
+                                                         Kind="Uplay" />
+                            </Button>
+                            <Button x:Name="BattleNetLaunchBtn"
+                                    Width="35"
+                                    Height="35"
+                                    Padding="0,0,0,0"
+                                    Click="OpenLauncher"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Tag="Battle"
+                                    ToolTip="Battle.Net">
+                                <materialDesign:PackIcon Width="20"
+                                                         Height="20"
+                                                         Margin="5,5,5,5"
+                                                         VerticalAlignment="Center"
+                                                         FontSize="20"
+                                                         Kind="Battlenet" />
+                            </Button>
+                            <Button x:Name="EpicLaunchBtn"
+                                    Width="35"
+                                    Height="35"
+                                    Padding="0,0,0,0"
+                                    Click="OpenLauncher"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Tag="Epic"
+                                    ToolTip="Epic Games">
+                                <materialDesign:PackIcon Width="20"
+                                                         Height="20"
+                                                         Margin="5,5,5,5"
+                                                         VerticalAlignment="Center"
+                                                         FontSize="20"
+                                                         Kind="Shield" />
+
+                            </Button>
                         </StackPanel>
-                    </ScrollViewer>
+                        <ScrollViewer Grid.Row="2"
+                                      Grid.ColumnSpan="2"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Orientation="Vertical">
+                                <Button x:Name="AllGenreBtn"
+                                        Click="ApplyGenreFilter_OnClick"
+                                        Content="All Genres"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Tag="" />
+                                <ItemsControl x:Name="GenreSidebar"
+                                              ItemsSource="{Binding Source={StaticResource GenreListCVS}, IsAsync=True}"
+                                              ScrollViewer.CanContentScroll="True">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <Button Name="GenreButton"
+                                                        Click="ApplyGenreFilter_OnClick"
+                                                        Content="{Binding Name}"
+                                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                                        Tag="{Binding Name}"
+                                                        Loaded="GenresLoaded" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </DockPanel>
             </materialDesign:DrawerHost.LeftDrawerContent>
         </materialDesign:DrawerHost>

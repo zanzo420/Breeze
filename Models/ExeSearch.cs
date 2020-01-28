@@ -35,28 +35,31 @@ namespace GameLauncher.Models
             catch (Exception e) { Trace.WriteLine("SearchSteam Failed: " + e); }
             try { SearchOrigin(); }
             catch (Exception e) { Trace.WriteLine("SearchOrigin Failed: " + e); }
-            try { SearchUPlay(); }
-            catch (Exception e) { Trace.WriteLine("SearchUPlay Failed: " + e); }
+            try { SearchUplay(); }
+            catch (Exception e) { Trace.WriteLine("SearchUplay Failed: " + e); }
             try { SearchEpic(); }
             catch (Exception e) { Trace.WriteLine("SearchEpic Failed: " + e); }
             try { SearchBattle(); }
             catch (Exception e) { Trace.WriteLine("SearchBattleNet Failed: " + e); }
-
-            var text = File.ReadAllLines("./Resources/GamesList.txt", Encoding.UTF8);
-            foreach (var exeItem in exes.ToList())
+            try
             {
-                for (int i = 0; i < text.Length; i++)
+                var text = File.ReadAllLines("./Resources/GamesList.txt", Encoding.UTF8);
+                foreach (var exeItem in exes.ToList())
                 {
-                    string[] columns = text[i].Split('|');
-                    if (columns[0] == exeItem.Title)
+                    for (int i = 0; i < text.Length; i++)
                     {
-                        Trace.WriteLine(DateTime.Now + ": Matched exe found, skipping - " + exeItem.Title);
-                        exes.Remove(exeItem);
+                        string[] columns = text[i].Split('|');
+                        if (columns[0] == exeItem.Title)
+                        {
+                            Trace.WriteLine(DateTime.Now + ": Matched exe found, skipping - " + exeItem.Title);
+                            exes.Remove(exeItem);
+                        }
                     }
                 }
+                exes2 = exes;
+                Exes = exes2;
             }
-            exes2 = exes;
-            Exes = exes2;
+            catch { Console.WriteLine("Fuck.."); }
         }
 
         public void UpdateObsCol(string title, string exe)
@@ -302,7 +305,7 @@ namespace GameLauncher.Models
 
         }
 
-        public void SearchUPlay()
+        public void SearchUplay()
         {
             uplayGamedirs.Clear();
             string regkey = "SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs";
